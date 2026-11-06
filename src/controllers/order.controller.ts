@@ -149,7 +149,12 @@ export const createOrder = async (req: Request, res: Response) => {
     });
 
     await order.save();
-    res.status(201).json({ success: true, order, razorpayOrder: rzpOrder });
+    res.status(201).json({
+      success: true,
+      order,
+      razorpayOrder: rzpOrder,
+      razorpayKeyId: process.env.RAZORPAY_KEY_ID,
+    });
   } catch (error: any) {
     res.status(500).json({ message: error.message });
   }
