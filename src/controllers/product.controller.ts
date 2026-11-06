@@ -180,7 +180,7 @@ export const getProducts = async (req: Request, res: Response) => {
       if (mongoose.isValidObjectId(category)) {
         query.category = category;
       } else {
-        const cat = await Category.findOne({ slug: category, isDeleted: false });
+        const cat: any = await Category.findOne({ slug: String(category), isDeleted: false });
         if (cat) query.category = cat._id;
       }
     }
@@ -189,7 +189,7 @@ export const getProducts = async (req: Request, res: Response) => {
       if (mongoose.isValidObjectId(collection)) {
         query.collectionId = collection;
       } else {
-        const col = await Collection.findOne({ slug: collection, isDeleted: false });
+        const col: any = await Collection.findOne({ slug: String(collection), isDeleted: false });
         if (col) query.collectionId = col._id;
       }
     }
@@ -198,7 +198,7 @@ export const getProducts = async (req: Request, res: Response) => {
       if (mongoose.isValidObjectId(occasion)) {
         query.occasion = occasion;
       } else {
-        const occ = await Occasion.findOne({ slug: occasion, isDeleted: false });
+        const occ: any = await Occasion.findOne({ slug: String(occasion), isDeleted: false });
         if (occ) query.occasion = occ._id;
       }
     }
@@ -207,7 +207,7 @@ export const getProducts = async (req: Request, res: Response) => {
       if (mongoose.isValidObjectId(fitType)) {
         query.fitType = fitType;
       } else {
-        const fit = await FitType.findOne({ slug: fitType, isDeleted: false });
+        const fit: any = await FitType.findOne({ slug: String(fitType), isDeleted: false });
         if (fit) query.fitType = fit._id;
       }
     }
