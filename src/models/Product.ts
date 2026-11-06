@@ -5,6 +5,7 @@ export interface ISizeEntry extends Types.Subdocument {
   size: 'XS' | 'S' | 'M' | 'L' | 'XL' | 'XXL' | 'XXXL' | 'Free Size';
   stock: number;
   price: number;
+  originalPrice?: number;
 }
 
 // Variant Interface
@@ -57,6 +58,7 @@ const sizeEntrySchema = new Schema<ISizeEntry>(
     },
     stock: { type: Number, default: 0, min: 0 },
     price: { type: Number, required: true, min: 0 },
+    originalPrice: { type: Number, min: 0 },
   },
   { _id: true }
 );

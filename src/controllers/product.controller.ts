@@ -112,6 +112,9 @@ export const createProduct = async (req: Request, res: Response) => {
       for (const s of v.sizes) {
         if (s.price <= 0) return res.status(400).json({ message: `Price must be > 0 for size ${s.size}` });
         if (s.stock < 0) return res.status(400).json({ message: `Stock cannot be negative for size ${s.size}` });
+        if (s.originalPrice !== undefined && Number(s.originalPrice) < Number(s.price)) {
+          return res.status(400).json({ message: `Original price (MRP) must be >= selling price for size ${s.size}` });
+        }
       }
     }
 
@@ -311,6 +314,7 @@ export const updateProduct = async (req: Request, res: Response) => {
       'isFeatured',
       'weight',
       'mainImage',
+      'variants',
     ];
 
     const extraError = checkExtraFields(allowed, req.body);
@@ -328,6 +332,7 @@ export const updateProduct = async (req: Request, res: Response) => {
       isFeatured,
       productStory,
       productDetails,
+      variants,
       ...updateData
     } = req.body;
 
@@ -392,6 +397,25 @@ export const updateProduct = async (req: Request, res: Response) => {
 
     if (productStory !== undefined) product.productStory = productStory;
     if (productDetails !== undefined) product.productDetails = productDetails;
+
+    if (variants !== undefined) {
+      if (!Array.isArray(variants) || variants.length === 0) {
+        return res.status(400).json({ message: 'Product must have at least one variant' });
+      }
+      for (const v of variants) {
+        if (!v.sizes || !Array.isArray(v.sizes) || v.sizes.length === 0) {
+          return res.status(400).json({ message: `Variant ${v.color} must have at least one size` });
+        }
+        for (const s of v.sizes) {
+          if (s.price <= 0) return res.status(400).json({ message: `Price must be > 0 for size ${s.size}` });
+          if (s.stock < 0) return res.status(400).json({ message: `Stock cannot be negative for size ${s.size}` });
+          if (s.originalPrice !== undefined && Number(s.originalPrice) < Number(s.price)) {
+            return res.status(400).json({ message: `Original price (MRP) must be >= selling price for size ${s.size}` });
+          }
+        }
+      }
+      product.variants = variants as any;
+    }
 
     Object.assign(product, updateData);
 
@@ -517,9 +541,12 @@ export const deleteVariant = async (req: Request, res: Response) => {
 // ─── ADD SIZE ────────────────────────────────────────────────────────────────
 export const addSize = async (req: Request, res: Response) => {
   try {
-    const { size, stock, price } = req.body;
+    const { size, stock, price, originalPrice } = req.body;
     if (price <= 0) return res.status(400).json({ message: 'Price must be greater than 0' });
     if (stock < 0) return res.status(400).json({ message: 'Stock cannot be negative' });
+    if (originalPrice !== undefined && Number(originalPrice) < Number(price)) {
+      return res.status(400).json({ message: 'Original price (MRP) must be >= selling price' });
+    }
 
     const product = await Product.findById(req.params.id);
     if (!product) return res.status(404).json({ message: 'Product not found' });
@@ -531,7 +558,12 @@ export const addSize = async (req: Request, res: Response) => {
       return res.status(400).json({ message: `Size "${size}" already exists` });
     }
 
-    variant.sizes.push({ size, stock, price } as any);
+    variant.sizes.push({ 
+      size, 
+      stock, 
+      price,
+      originalPrice: originalPrice ? Number(originalPrice) : undefined 
+    } as any);
     await product.save();
     res.status(201).json(product);
   } catch (error: any) {
@@ -542,7 +574,7 @@ export const addSize = async (req: Request, res: Response) => {
 // ─── UPDATE SIZE ─────────────────────────────────────────────────────────────
 export const updateSize = async (req: Request, res: Response) => {
   try {
-    const { stock, price, size } = req.body;
+    const { stock, price, size, originalPrice } = req.body;
 
     const product = await Product.findById(req.params.id);
     const variant = product?.variants.id(req.params.variantId as any);
@@ -561,6 +593,7 @@ export const updateSize = async (req: Request, res: Response) => {
 
     if (stock !== undefined) sizeEntry.stock = stock;
     if (price !== undefined) sizeEntry.price = price;
+    if (originalPrice !== undefined) sizeEntry.originalPrice = Number(originalPrice);
 
     await product?.save();
     res.json(product);
