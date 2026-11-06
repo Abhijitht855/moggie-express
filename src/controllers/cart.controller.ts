@@ -79,6 +79,7 @@ export const getCart = async (req: Request, res: Response) => {
                 image: variant.images[0] || productObj.mainImage,
                 size: sizeDetail.size,
                 price,
+                originalPrice: sizeDetail.originalPrice,
                 stock: sizeDetail.stock,
                 subtotal
             };
