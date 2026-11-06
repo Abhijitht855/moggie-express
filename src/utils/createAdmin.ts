@@ -1,27 +1,41 @@
 import 'dotenv/config';
 import mongoose from 'mongoose';
 import User from '../models/User';
+import dns from 'dns';
+
+// Fix for Windows DNS resolution
+if (process.platform === 'win32') {
+  try {
+    dns.setDefaultResultOrder?.('ipv4first');
+    dns.setServers(['8.8.8.8', '1.1.1.1']);
+  } catch {}
+}
 
 const createAdmin = async () => {
-  await mongoose.connect(process.env.MONGO_URI as string);
+  try {
+    const mongoUri = process.env.MONGO_URI;
+    if (!mongoUri) throw new Error('MONGO_URI is not set in .env');
 
-  const email = process.env.ADMIN_EMAIL;
-  if (!email) throw new Error('ADMIN_EMAIL not set in .env');
+    await mongoose.connect(mongoUri);
 
-const user = await User.findOneAndUpdate(
-  { email },
-  { role: 'admin' },
-  { returnDocument: 'after' }
-);
+    const email = process.env.ADMIN_EMAIL?.toLowerCase().trim();
+    if (!email) throw new Error('ADMIN_EMAIL is not set in .env');
 
-  if (!user) {
-    console.log('❌ User not found');
-  } else {
-    console.log(`✅ ${user.email} is now admin`);
+    const user = await User.findOneAndUpdate(
+      { email },
+      {
+        $set: { role: 'admin' },
+        $setOnInsert: { name: 'Moggie Admin', email },
+      },
+      { upsert: true, new: true }
+    );
+
+    console.log(`🎉 SUCCESS: ${user.email} is now configured as ADMIN! (ID: ${user._id})`);
+  } catch (error: any) {
+    console.error('❌ Failed to create/configure admin:', error.message);
+  } finally {
+    await mongoose.disconnect();
   }
-
-  await mongoose.disconnect();
 };
 
 createAdmin();
-
