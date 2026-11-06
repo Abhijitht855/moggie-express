@@ -1,5 +1,6 @@
 import { Request, Response } from 'express';
 import User from '../models/User';
+import Otp from '../models/Otp';
 import { generateTokens, sendRefreshTokenCookie } from '../utils/jwt';
 import { validationResult } from 'express-validator';
 import jwt from 'jsonwebtoken';
@@ -7,7 +8,8 @@ import { JwtPayload } from '../types/index';
 import { sendOTPEmail } from '../utils/mail';
 
 /**
- * @desc    Request OTP (Handles both login and registration initiation)
+ * @desc    Request OTP (Sends 6-digit OTP to email, no User record created yet)
+ * @route   POST /api/auth/request-otp
  */
 export const requestOTP = async (req: Request, res: Response): Promise<void> => {
   try {
@@ -17,24 +19,16 @@ export const requestOTP = async (req: Request, res: Response): Promise<void> => 
       return;
     }
 
-    const { email } = req.body;
+    const email = req.body.email.toLowerCase().trim();
     const otp = Math.floor(100000 + Math.random() * 900000).toString();
-    const otpExpires = new Date(Date.now() + 10 * 60 * 1000);
 
-    const user = await User.findOne({ email });
-
-    if (user) {
-      user.otp = otp;
-      user.otpExpires = otpExpires;
-      await user.save();
-    } else {
-      await User.create({
-        email,
-        otp,
-        otpExpires,
-        name: 'Guest User'
-      });
-    }
+    // Store temporary OTP in Otp collection with TTL (10 minutes).
+    // IMPORTANT: No unverified User record is created in the database yet!
+    await Otp.findOneAndUpdate(
+      { email },
+      { otp, createdAt: new Date() },
+      { upsert: true, new: true }
+    );
 
     await sendOTPEmail(email, otp);
     res.json({ success: true, message: 'OTP sent to email' });
@@ -44,46 +38,9 @@ export const requestOTP = async (req: Request, res: Response): Promise<void> => 
 };
 
 /**
- * @desc    Register new user (OTP Only)
- */
-export const register = async (req: Request, res: Response): Promise<void> => {
-  try {
-    const errors = validationResult(req);
-    if (!errors.isEmpty()) {
-      res.status(400).json({ success: false, errors: errors.array() });
-      return;
-    }
-
-    const { name, email, otp } = req.body;
-
-    const user = await User.findOne({ email }).select('+otp +otpExpires');
-
-    if (!user || user.otp !== otp || (user.otpExpires && user.otpExpires < new Date())) {
-      res.status(400).json({ success: false, message: 'Invalid or expired OTP' });
-      return;
-    }
-
-    user.name = name;
-    user.otp = undefined;
-    user.otpExpires = undefined;
-    await user.save();
-
-    const { accessToken, refreshToken } = generateTokens({ _id: user._id.toString(), role: user.role });
-    sendRefreshTokenCookie(res, refreshToken, req);
-
-    res.status(201).json({
-      success: true,
-      message: 'Registered successfully',
-      accessToken,
-      user: { id: user._id, name: user.name, email: user.email, role: user.role }
-    });
-  } catch (error) {
-    res.status(500).json({ success: false, message: 'Registration failed' });
-  }
-};
-
-/**
- * @desc    Login user with OTP only
+ * @desc    Unified Login & First-time Verification
+ *          (If user doesn't exist, automatically creates user as 'Guest User')
+ * @route   POST /api/auth/login
  */
 export const login = async (req: Request, res: Response): Promise<void> => {
   try {
@@ -93,27 +50,35 @@ export const login = async (req: Request, res: Response): Promise<void> => {
       return;
     }
 
-    const { email, otp } = req.body;
+    const email = req.body.email.toLowerCase().trim();
+    const { otp, name } = req.body;
 
-    const user = await User.findOne({ email }).select('+otp +otpExpires');
+    // 1. Verify OTP from Otp collection
+    const otpRecord = await Otp.findOne({ email, otp });
 
-    if (!user) {
-      res.status(401).json({ success: false, message: 'User not found. Please register.' });
-      return;
-    }
-
-    if (!user.otp || user.otp !== otp || (user.otpExpires && user.otpExpires < new Date())) {
+    if (!otpRecord) {
       res.status(401).json({ success: false, message: 'Invalid or expired OTP' });
       return;
     }
 
-    user.otp = undefined;
-    user.otpExpires = undefined;
-    await user.save();
+    // 2. Delete used OTP immediately
+    await Otp.deleteOne({ _id: otpRecord._id });
+
+    // 3. Find or Create User
+    let user = await User.findOne({ email });
+
+    if (!user) {
+      // First-time user verified: Now save to database!
+      user = await User.create({
+        email,
+        name: name?.trim() || 'Guest User',
+        role: 'user',
+      });
+    }
 
     const { accessToken, refreshToken } = generateTokens({
       _id: user._id.toString(),
-      role: user.role
+      role: user.role,
     });
 
     sendRefreshTokenCookie(res, refreshToken, req);
@@ -129,8 +94,52 @@ export const login = async (req: Request, res: Response): Promise<void> => {
         role: user.role,
       },
     });
-  } catch (error) {
-    res.status(500).json({ success: false, message: 'Server error' });
+  } catch (error: any) {
+    res.status(500).json({ success: false, message: error.message || 'Server error' });
+  }
+};
+
+/**
+ * @desc    Register new user (Optional alias for login with explicit name)
+ * @route   POST /api/auth/register
+ */
+export const register = async (req: Request, res: Response): Promise<void> => {
+  return login(req, res);
+};
+
+/**
+ * @desc    Update User Profile (Name, etc.)
+ * @route   PUT /api/auth/profile
+ * @access  Private
+ */
+export const updateProfile = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const { name } = req.body;
+    const user = await User.findById(req.user!._id);
+
+    if (!user) {
+      res.status(404).json({ success: false, message: 'User not found' });
+      return;
+    }
+
+    if (name && name.trim()) {
+      user.name = name.trim();
+    }
+
+    await user.save();
+
+    res.json({
+      success: true,
+      message: 'Profile updated successfully',
+      user: {
+        id: user._id,
+        name: user.name,
+        email: user.email,
+        role: user.role,
+      },
+    });
+  } catch (error: any) {
+    res.status(500).json({ success: false, message: error.message || 'Server error' });
   }
 };
 
@@ -140,10 +149,6 @@ export const login = async (req: Request, res: Response): Promise<void> => {
  */
 export const refresh = async (req: Request, res: Response): Promise<void> => {
   try {
-    console.log("--- Refresh Token Debug ---");
-    console.log("Headers Cookie:", req.headers.cookie); // Raw cookie string
-    console.log("Parsed Cookies:", req.cookies); // Parsed by cookie-parser
-    
     const token = req.cookies.refreshToken;
 
     if (!token) {
@@ -172,7 +177,7 @@ export const refresh = async (req: Request, res: Response): Promise<void> => {
  */
 export const logout = async (req: Request, res: Response): Promise<void> => {
   const isProduction = process.env.NODE_ENV === 'production';
-  const origin = req.headers.origin || "";
+  const origin = req.headers.origin || '';
 
   const cookieOptions: any = {
     httpOnly: true,
@@ -186,12 +191,11 @@ export const logout = async (req: Request, res: Response): Promise<void> => {
   }
 
   res.clearCookie('refreshToken', cookieOptions);
-
   res.json({ success: true, message: 'Logged out successfully' });
 };
 
 /**
- * @desc    Get Current User
+ * @desc    Get Current User Profile
  * @route   GET /api/auth/me
  */
 export const getMe = async (req: Request, res: Response): Promise<void> => {
@@ -221,6 +225,8 @@ export const getAllUsers = async (req: Request, res: Response): Promise<void> =>
   }
 };
 
+// ─── ADDRESS MANAGEMENT ──────────────────────────────────────────────────────
+
 // 1. ADD NEW ADDRESS
 export const addAddress = async (req: Request, res: Response) => {
   try {
@@ -230,11 +236,11 @@ export const addAddress = async (req: Request, res: Response) => {
     const { firstName, address, phone, postalCode } = req.body;
     if (!firstName || !address || !phone || !postalCode) {
       return res.status(400).json({
-        message: 'firstName, address, phone, postalCode എന്നിവ നിർബന്ധമാണ്'
+        message: 'firstName, address, phone, and postalCode are required',
       });
     }
 
-    const hasDefault = user.addresses.some(addr => addr.isDefault);
+    const hasDefault = user.addresses.some((addr) => addr.isDefault);
     const newAddress = { ...req.body, isDefault: !hasDefault };
 
     user.addresses.push(newAddress as any);
@@ -252,7 +258,6 @@ export const setDefaultAddress = async (req: Request, res: Response) => {
     if (!user) return res.status(404).json({ message: 'User not found' });
 
     const { addressId } = req.params;
-
     const addressToSet = (user.addresses as any).id(addressId);
 
     if (!addressToSet) {
@@ -277,7 +282,6 @@ export const deleteAddress = async (req: Request, res: Response) => {
     if (!user) return res.status(404).json({ message: 'User not found' });
 
     const { addressId } = req.params;
-
     const addressToDelete = (user.addresses as any).id(addressId);
 
     if (!addressToDelete) {
@@ -285,9 +289,7 @@ export const deleteAddress = async (req: Request, res: Response) => {
     }
 
     const wasDefault = addressToDelete.isDefault;
-
     (user.addresses as any).pull(addressId);
-
 
     if (wasDefault && user.addresses.length > 0) {
       user.addresses[0].isDefault = true;
@@ -300,7 +302,7 @@ export const deleteAddress = async (req: Request, res: Response) => {
   }
 };
 
-// 4. UPDATE ADDRESS (EDIT)
+// 4. UPDATE ADDRESS
 export const updateAddress = async (req: Request, res: Response) => {
   try {
     const user = await User.findById(req.user!._id);
@@ -310,7 +312,6 @@ export const updateAddress = async (req: Request, res: Response) => {
     const { firstName, lastName, address, city, state, postalCode, phone } = req.body;
 
     const existingAddress = (user.addresses as any).id(addressId);
-
     if (!existingAddress) {
       return res.status(404).json({ message: 'Address not found' });
     }
@@ -328,7 +329,7 @@ export const updateAddress = async (req: Request, res: Response) => {
     res.json({
       success: true,
       message: 'Address updated successfully',
-      addresses: user.addresses
+      addresses: user.addresses,
     });
   } catch (error: any) {
     res.status(500).json({ success: false, message: error.message });
