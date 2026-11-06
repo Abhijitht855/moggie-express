@@ -42,6 +42,8 @@ app.use(
 const allowedOrigins = [
   'http://localhost:3000',
   'http://localhost:5173',
+  'http://localhost:5174',
+  'https://moggie-eshoping.vercel.app',
   'https://moggieattires.com',
   'https://www.moggieattires.com',
   'https://admin.moggieattires.com',
@@ -54,10 +56,18 @@ app.use(cookieParser());
 app.use(
   cors({
     origin: function (origin, callback) {
-      if (!origin || allowedOrigins.includes(origin)) {
+      if (!origin) return callback(null, true);
+      const cleanOrigin = origin.replace(/\/$/, '');
+      const isAllowed =
+        allowedOrigins.some((o) => o.replace(/\/$/, '') === cleanOrigin) ||
+        cleanOrigin.endsWith('.vercel.app') ||
+        cleanOrigin.includes('localhost') ||
+        cleanOrigin.includes('127.0.0.1');
+
+      if (isAllowed) {
         return callback(null, true);
       }
-      return callback(new Error('Not allowed by CORS'));
+      return callback(new Error(`Not allowed by CORS: ${origin}`));
     },
     credentials: true,
   })

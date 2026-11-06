@@ -20,7 +20,7 @@ export const sendRefreshTokenCookie = (res: Response, token: string, req: Reques
     maxAge: 7 * 24 * 60 * 60 * 1000,
   };
 
-  if (origin && !origin.includes('localhost')) {
+  if (origin && origin.includes('moggieattires.com')) {
     cookieOptions.domain = process.env.COOKIE_DOMAIN || '.moggieattires.com';
   }
 
