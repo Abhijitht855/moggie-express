@@ -1,12 +1,14 @@
 import mongoose from 'mongoose';
 import dns from 'dns';
 
-// Fix for Windows / local ISP DNS failing MongoDB Atlas SRV lookups (ECONNREFUSED)
-try {
-  dns.setDefaultResultOrder?.('ipv4first');
-  dns.setServers(['8.8.8.8', '1.1.1.1']);
-} catch {
-  // Ignore if custom DNS cannot be set in current environment
+// Fix for Windows local ISP DNS failing MongoDB Atlas SRV lookups (ECONNREFUSED)
+if (process.platform === 'win32') {
+  try {
+    dns.setDefaultResultOrder?.('ipv4first');
+    dns.setServers(['8.8.8.8', '1.1.1.1']);
+  } catch {
+    // Ignore if custom DNS cannot be set
+  }
 }
 
 const connectDB = async (): Promise<void> => {
@@ -18,7 +20,9 @@ const connectDB = async (): Promise<void> => {
   }
 
   try {
-    const conn = await mongoose.connect(mongoUri);
+    const conn = await mongoose.connect(mongoUri, {
+      serverSelectionTimeoutMS: 10000,
+    });
     console.log(`✅ MongoDB Connected: ${conn.connection.host}`);
   } catch (error) {
     console.error(`❌ DB Error: ${error}`);
