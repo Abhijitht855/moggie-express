@@ -1,6 +1,8 @@
 import { Request, Response } from 'express';
+import mongoose from 'mongoose';
 import User from '../models/User';
 import Otp from '../models/Otp';
+import Order from '../models/Order';
 import { generateTokens, sendRefreshTokenCookie } from '../utils/jwt';
 import { validationResult } from 'express-validator';
 import jwt from 'jsonwebtoken';
@@ -243,14 +245,42 @@ export const getMe = async (req: Request, res: Response): Promise<void> => {
 };
 
 /**
- * @desc    Get All Users
+ * @desc    Get All Users / Customers (Admin View with Order Stats)
  * @route   GET /api/auth/users
  * @access  Private/Admin
  */
 export const getAllUsers = async (req: Request, res: Response): Promise<void> => {
   try {
-    const users = await User.find({}).select('-password').sort({ createdAt: -1 });
-    res.json(users);
+    const users = await User.find({}).select('-password').sort({ createdAt: -1 }).lean();
+
+    // Attach order count and total spent for each customer
+    const usersWithStats = await Promise.all(
+      users.map(async (u: any) => {
+        const orderSummary = await Order.aggregate([
+          { $match: { user: u._id, isPaid: true } },
+          {
+            $group: {
+              _id: null,
+              totalOrders: { $sum: 1 },
+              totalSpent: { $sum: '$totalPrice' },
+            },
+          },
+        ]);
+
+        const defaultAddress = u.addresses?.find((a: any) => a.isDefault) || u.addresses?.[0];
+
+        return {
+          ...u,
+          phone: defaultAddress?.phone || '',
+          city: defaultAddress?.city || '',
+          state: defaultAddress?.state || '',
+          ordersCount: orderSummary[0]?.totalOrders || 0,
+          totalSpent: orderSummary[0]?.totalSpent || 0,
+        };
+      })
+    );
+
+    res.json(usersWithStats);
   } catch (error) {
     res.status(500).json({ message: 'Server error', error });
   }
