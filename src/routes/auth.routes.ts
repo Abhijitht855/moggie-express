@@ -34,6 +34,7 @@ router.post('/request-otp', otpRequestValidation, authLimiter, requestOTP);
 router.post('/login', authLimiter, loginValidation, login);
 router.post('/register', authLimiter, loginValidation, register); // Backward-compatible alias
 router.post('/refresh-token', refresh);
+router.post('/refresh', refresh); // Alias for convenience
 router.post('/logout', logout);
 
 // Profile
