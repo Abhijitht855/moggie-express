@@ -41,7 +41,7 @@ export const requestOTP = async (req: Request, res: Response): Promise<void> => 
     await Otp.findOneAndUpdate(
       { email },
       { otp, createdAt: new Date() },
-      { upsert: true, new: true }
+      { upsert: true, returnDocument: 'after' }
     );
 
     console.log(`[AUTH] 🔑 Generated OTP for ${email}: ${otp}`);

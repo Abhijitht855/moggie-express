@@ -59,7 +59,7 @@ export const updateBanner = async (req: Request, res: Response) => {
       );
     }
 
-    const banner = await Banner.findByIdAndUpdate(id, req.body, { new: true });
+    const banner = await Banner.findByIdAndUpdate(id, req.body, { returnDocument: 'after' });
     res.json(banner);
   } catch (error: any) {
     res.status(500).json({ message: error.message });

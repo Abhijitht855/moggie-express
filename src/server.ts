@@ -1,4 +1,11 @@
 import 'dotenv/config';
+import dns from 'dns';
+
+// Force IPv4 lookup first across all Node.js outbound connections (Render/Linux fix)
+try {
+  dns.setDefaultResultOrder?.('ipv4first');
+} catch {}
+
 import app from './app';
 import connectDB from './config/db';
 

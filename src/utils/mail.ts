@@ -1,14 +1,23 @@
 import nodemailer from 'nodemailer';
+import dns from 'dns';
+
+// Ensure IPv4 is prioritized to avoid ENETUNREACH on Linux/Render cloud containers
+try {
+  dns.setDefaultResultOrder?.('ipv4first');
+} catch {}
 
 const transporter = nodemailer.createTransport({
-  service: 'gmail',
+  host: 'smtp.gmail.com',
+  port: 465,
+  secure: true,
+  family: 4, // Force IPv4 socket connection
   pool: true,
   maxConnections: 5,
   auth: {
     user: process.env.EMAIL_USER,
     pass: process.env.EMAIL_PASS,
   },
-});
+} as any);
 
 export const sendOrderEmail = async (
   userEmail: string,

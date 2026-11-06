@@ -27,7 +27,7 @@ const createAdmin = async () => {
         $set: { role: 'admin' },
         $setOnInsert: { name: 'Moggie Admin', email },
       },
-      { upsert: true, new: true }
+      { upsert: true, returnDocument: 'after' }
     );
 
     console.log(`🎉 SUCCESS: ${user.email} is now configured as ADMIN! (ID: ${user._id})`);
