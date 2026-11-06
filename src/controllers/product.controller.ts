@@ -267,7 +267,13 @@ export const getProducts = async (req: Request, res: Response) => {
 
 export const getProductById = async (req: Request, res: Response) => {
   try {
-    const product = await Product.findOne({ _id: req.params.id, isDeleted: false })
+    const identifier = req.params.id;
+    const isObjectId = mongoose.isValidObjectId(identifier);
+    const query = isObjectId
+      ? { _id: identifier, isDeleted: false }
+      : { slug: identifier, isDeleted: false };
+
+    const product = await Product.findOne(query)
       .populate('category', 'name slug')
       .populate('collectionId', 'name slug')
       .populate('occasion', 'name slug')
