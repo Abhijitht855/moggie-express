@@ -43,6 +43,42 @@ export const getCategories = async (req: Request, res: Response) => {
   }
 };
 
+// ─── UPDATE CATEGORY ────────────────────────────────────────────────────────
+export const updateCategory = async (req: Request, res: Response) => {
+  try {
+    const { id } = req.params;
+    const { name } = req.body;
+
+    if (!name || !name.trim()) {
+      return res.status(400).json({ message: 'Category name is required' });
+    }
+
+    const category = await Category.findOne({ _id: id, isDeleted: false });
+    if (!category) return res.status(404).json({ message: 'Category not found' });
+
+    if (name.trim().toLowerCase() !== category.name.toLowerCase()) {
+      const exists = await Category.findOne({
+        name: { $regex: new RegExp(`^${name.trim()}$`, 'i') },
+        isDeleted: false,
+      });
+      if (exists) return res.status(400).json({ message: 'Category name already exists' });
+
+      category.name = name.trim();
+      category.slug = name
+        .toLowerCase()
+        .trim()
+        .replace(/[^\w\s-]/g, '')
+        .replace(/[\s_-]+/g, '-')
+        .replace(/^-+|-+$/g, '');
+    }
+
+    await category.save();
+    res.json(category);
+  } catch (error: any) {
+    res.status(500).json({ message: error.message });
+  }
+};
+
 // ─── DELETE CATEGORY (SOFT DELETE) ──────────────────────────────────────────
 export const deleteCategory = async (req: Request, res: Response) => {
   try {
