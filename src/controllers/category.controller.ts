@@ -11,14 +11,14 @@ const checkExtraFields = (allowedFields: string[], body: any): string | null => 
 // ─── CREATE CATEGORY ──────────────────────────────────────────────────────────
 export const createCategory = async (req: Request, res: Response) => {
   try {
-    const allowed = ['name'];
+    const allowed = ['name', 'image'];
     const extraError = checkExtraFields(allowed, req.body);
     if (extraError) return res.status(400).json({ message: extraError });
 
-    const { name } = req.body;
+    const { name, image } = req.body;
 
     const categoryExists = await Category.findOne({ 
-      name: { $regex: new RegExp(`^${name}$`, 'i') },
+      name: { $regex: new RegExp(`^${name.trim()}$`, 'i') },
       isDeleted: false 
     });
 
@@ -26,7 +26,10 @@ export const createCategory = async (req: Request, res: Response) => {
       return res.status(400).json({ message: 'Category name already exists' });
     }
 
-    const category = await Category.create({ name });
+    const category = await Category.create({ 
+      name: name.trim(),
+      image: image?.trim() || '' 
+    });
     res.status(201).json(category);
   } catch (error: any) {
     res.status(500).json({ message: error.message });
@@ -36,8 +39,35 @@ export const createCategory = async (req: Request, res: Response) => {
 // ─── GET CATEGORIES ──────────────────────────────────────────────────────────
 export const getCategories = async (req: Request, res: Response) => {
   try {
-    const categories = await Category.find({ isDeleted: false }).sort({ name: 1 });
-    res.json(categories);
+    const categories = await Category.find({ isDeleted: false }).sort({ name: 1 }).lean();
+
+    // Dynamically resolve image: if category has no explicit image,
+    // automatically inherit the first product's first image under this category
+    const categoriesWithImages = await Promise.all(
+      categories.map(async (cat: any) => {
+        if (cat.image && cat.image.trim()) {
+          return cat;
+        }
+
+        const firstProduct: any = await Product.findOne(
+          { category: cat._id, isDeleted: false },
+          { mainImage: 1, 'variants.images': 1 }
+        ).sort({ createdAt: -1 }).lean();
+
+        const autoImage =
+          firstProduct?.mainImage ||
+          firstProduct?.variants?.[0]?.images?.[0] ||
+          '';
+
+        return {
+          ...cat,
+          image: autoImage,
+          isAutoImage: !cat.image && !!autoImage,
+        };
+      })
+    );
+
+    res.json(categoriesWithImages);
   } catch (error: any) {
     res.status(500).json({ message: error.message });
   }
@@ -47,7 +77,7 @@ export const getCategories = async (req: Request, res: Response) => {
 export const updateCategory = async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
-    const { name } = req.body;
+    const { name, image } = req.body;
 
     if (!name || !name.trim()) {
       return res.status(400).json({ message: 'Category name is required' });
@@ -70,6 +100,10 @@ export const updateCategory = async (req: Request, res: Response) => {
         .replace(/[^\w\s-]/g, '')
         .replace(/[\s_-]+/g, '-')
         .replace(/^-+|-+$/g, '');
+    }
+
+    if (image !== undefined) {
+      category.image = image.trim();
     }
 
     await category.save();
