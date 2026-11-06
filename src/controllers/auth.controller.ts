@@ -44,6 +44,8 @@ export const requestOTP = async (req: Request, res: Response): Promise<void> => 
       { upsert: true, new: true }
     );
 
+    console.log(`[AUTH] 🔑 Generated OTP for ${email}: ${otp}`);
+
     await sendOTPEmail(email, otp);
     res.json({ success: true, message: 'OTP sent to email' });
   } catch (error) {
