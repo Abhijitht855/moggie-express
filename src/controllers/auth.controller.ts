@@ -113,6 +113,7 @@ export const login = async (req: Request, res: Response): Promise<void> => {
       success: true,
       message: 'Login successful',
       accessToken,
+      refreshToken,
       user: {
         id: user._id,
         name: user.name,
@@ -175,7 +176,7 @@ export const updateProfile = async (req: Request, res: Response): Promise<void> 
  */
 export const refresh = async (req: Request, res: Response): Promise<void> => {
   try {
-    const token = req.cookies.refreshToken;
+    const token = req.cookies?.refreshToken || req.body?.refreshToken;
 
     if (!token) {
       res.status(401).json({ message: 'Not authenticated, no refresh token' });
@@ -191,7 +192,11 @@ export const refresh = async (req: Request, res: Response): Promise<void> => {
 
     sendRefreshTokenCookie(res, tokens.refreshToken, req);
 
-    res.json({ accessToken: tokens.accessToken });
+    res.json({
+      success: true,
+      accessToken: tokens.accessToken,
+      refreshToken: tokens.refreshToken,
+    });
   } catch (error) {
     res.status(403).json({ message: 'Invalid or expired refresh token' });
   }

@@ -43,6 +43,7 @@ export const uploadFiles = async (req: Request, res: Response) => {
       success: true,
       message: `${uploadedUrls.length} file(s) uploaded successfully to ImageKit`,
       urls: uploadedUrls,
+      url: uploadedUrls[0]?.url,
     });
   } catch (error: any) {
     console.error('ImageKit Upload Error:', error);

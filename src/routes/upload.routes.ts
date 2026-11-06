@@ -5,12 +5,12 @@ import { upload } from '../config/imagekit';
 
 const router = Router();
 
-// Upload multiple files (images/videos) to ImageKit
+// Upload files (accepts any field name: files, file, image, images)
 router.post(
   '/',
   protect,
   adminOnly,
-  upload.array('files', 10),
+  upload.any(),
   uploadFiles
 );
 
