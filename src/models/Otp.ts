@@ -26,3 +26,4 @@ const otpSchema = new Schema<IOtp>({
 });
 
 export default mongoose.model<IOtp>('Otp', otpSchema);
+

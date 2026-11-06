@@ -19,7 +19,21 @@ export const requestOTP = async (req: Request, res: Response): Promise<void> => 
       return;
     }
 
-    const email = req.body.email.toLowerCase().trim();
+    const { email: rawEmail, forAdmin } = req.body;
+    const email = rawEmail.toLowerCase().trim();
+
+    // If requested from Admin Portal, verify this email belongs to an Admin BEFORE sending OTP
+    if (forAdmin === true || forAdmin === 'true') {
+      const user = await User.findOne({ email });
+      if (!user || user.role !== 'admin') {
+        res.status(403).json({
+          success: false,
+          message: 'Access Denied: No administrator account associated with this email.',
+        });
+        return;
+      }
+    }
+
     const otp = Math.floor(100000 + Math.random() * 900000).toString();
 
     // Store temporary OTP in Otp collection with TTL (10 minutes).
@@ -51,7 +65,7 @@ export const login = async (req: Request, res: Response): Promise<void> => {
     }
 
     const email = req.body.email.toLowerCase().trim();
-    const { otp, name } = req.body;
+    const { otp, name, forAdmin } = req.body;
 
     // 1. Verify OTP from Otp collection
     const otpRecord = await Otp.findOne({ email, otp });
@@ -66,6 +80,16 @@ export const login = async (req: Request, res: Response): Promise<void> => {
 
     // 3. Find or Create User
     let user = await User.findOne({ email });
+
+    if (forAdmin === true || forAdmin === 'true') {
+      if (!user || user.role !== 'admin') {
+        res.status(403).json({
+          success: false,
+          message: 'Access Denied: You do not have administrator permissions.',
+        });
+        return;
+      }
+    }
 
     if (!user) {
       // First-time user verified: Now save to database!
