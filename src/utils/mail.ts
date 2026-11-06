@@ -1,9 +1,17 @@
 import nodemailer from 'nodemailer';
 import dns from 'dns';
 
-// Ensure IPv4 is prioritized to avoid ENETUNREACH on Linux/Render cloud containers
+// Ensure IPv4 is strictly used to avoid ENETUNREACH & timeouts on Linux/Render cloud containers
 try {
   dns.setDefaultResultOrder?.('ipv4first');
+  (dns as any).resolve6 = (_hostname: string, callback: any) => {
+    callback(Object.assign(new Error('IPv6 disabled in cloud environment'), { code: (dns as any).NODATA }));
+  };
+  if ((dns as any).Resolver?.prototype?.resolve6) {
+    (dns as any).Resolver.prototype.resolve6 = (_hostname: string, callback: any) => {
+      callback(Object.assign(new Error('IPv6 disabled in cloud environment'), { code: (dns as any).NODATA }));
+    };
+  }
 } catch {}
 
 const transporter = nodemailer.createTransport({
@@ -11,6 +19,9 @@ const transporter = nodemailer.createTransport({
   port: 465,
   secure: true,
   family: 4, // Force IPv4 socket connection
+  connectionTimeout: 10000, // 10s maximum to avoid UI hanging
+  greetingTimeout: 5000,
+  socketTimeout: 15000,
   pool: true,
   maxConnections: 5,
   auth: {

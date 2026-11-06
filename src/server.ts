@@ -4,6 +4,14 @@ import dns from 'dns';
 // Force IPv4 lookup first across all Node.js outbound connections (Render/Linux fix)
 try {
   dns.setDefaultResultOrder?.('ipv4first');
+  (dns as any).resolve6 = (_hostname: string, callback: any) => {
+    callback(Object.assign(new Error('IPv6 disabled in cloud environment'), { code: (dns as any).NODATA }));
+  };
+  if ((dns as any).Resolver?.prototype?.resolve6) {
+    (dns as any).Resolver.prototype.resolve6 = (_hostname: string, callback: any) => {
+      callback(Object.assign(new Error('IPv6 disabled in cloud environment'), { code: (dns as any).NODATA }));
+    };
+  }
 } catch {}
 
 import app from './app';
