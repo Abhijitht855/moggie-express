@@ -65,6 +65,47 @@ export const getDashboardStats = async (req: Request, res: Response) => {
       { $sort: { "_id.year": 1, "_id.month": 1 } }
     ]);
 
+    const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+    const revenueChart = revenueGraph.map((item: any) => ({
+      month: `${monthNames[item._id.month - 1]} ${item._id.year}`,
+      revenue: Math.round(item.total),
+    }));
+
+    // Recent 5 orders for dashboard feed
+    const recentOrders = await Order.find({})
+      .populate('user', 'name email')
+      .sort({ createdAt: -1 })
+      .limit(5)
+      .select('user totalPrice orderStatus isPaid createdAt razorpayOrderId');
+
+    // Low stock items (stock <= 5)
+    const lowStockRaw = await Product.find({
+      isDeleted: false,
+      'variants.sizes.stock': { $lte: 5 },
+    })
+      .select('name mainImage variants')
+      .limit(6)
+      .lean();
+
+    const lowStockAlerts = lowStockRaw.flatMap((p: any) => {
+      const items: any[] = [];
+      p.variants?.forEach((v: any) => {
+        v.sizes?.forEach((s: any) => {
+          if (s.stock <= 5) {
+            items.push({
+              productId: p._id,
+              name: p.name,
+              mainImage: p.mainImage,
+              color: v.color,
+              size: s.size,
+              stock: s.stock,
+            });
+          }
+        });
+      });
+      return items;
+    }).slice(0, 6);
+
     const totalAdmins = await User.countDocuments({ role: 'admin' });
 
     const revenue = paidOrdersData.length > 0 ? paidOrdersData[0].totalRevenue : 0;
@@ -84,7 +125,6 @@ export const getDashboardStats = async (req: Request, res: Response) => {
       }
     });
 
-
     res.json({
       success: true,
       stats: {
@@ -97,7 +137,10 @@ export const getDashboardStats = async (req: Request, res: Response) => {
         totalCategories,
         pendingOrders: statusBreakdown.Processing,
         statusBreakdown,
-        revenueGraph 
+        revenueGraph,
+        revenueChart,
+        recentOrders,
+        lowStockAlerts
       }
     });
 
