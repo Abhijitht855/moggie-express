@@ -24,7 +24,11 @@ export const getAllBanners = async (req: Request, res: Response) => {
 // ─── ADD NEW BANNER (With Priority Shift) ──────────────────────────────
 export const createBanner = async (req: Request, res: Response) => {
   try {
-    const { imageUrl, link, priority, isActive } = req.body;
+    const { title, subtitle, imageUrl, link, priority, isActive } = req.body;
+
+    if (!imageUrl) {
+      return res.status(400).json({ message: 'Banner image is required' });
+    }
 
     if (priority !== undefined) {
       await Banner.updateMany(
@@ -33,7 +37,14 @@ export const createBanner = async (req: Request, res: Response) => {
       );
     }
 
-    const banner = await Banner.create({ imageUrl, link, priority, isActive });
+    const banner = await Banner.create({ 
+      title: title?.trim(), 
+      subtitle: subtitle?.trim(), 
+      imageUrl, 
+      link: link?.trim(), 
+      priority: priority !== undefined ? Number(priority) : 0, 
+      isActive: isActive !== undefined ? isActive : true 
+    });
     res.status(201).json(banner);
   } catch (error: any) {
     res.status(500).json({ message: error.message });
