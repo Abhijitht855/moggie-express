@@ -22,8 +22,6 @@ export interface IUserDocument extends Document {
   addresses: Types.DocumentArray<IAddress & Types.Subdocument>;
   createdAt: Date;
   updatedAt: Date;
-  otp?: string;
-  otpExpires?: Date;
   comparePassword(password: string): Promise<boolean>;
 }
 
@@ -65,8 +63,6 @@ const userSchema = new Schema<IUserDocument>(
       enum: ['user', 'admin'],
       default: 'user',
     },
-    otp: { type: String, select: false },
-    otpExpires: { type: Date, select: false },
     addresses: [addressSchema],
   },
   { timestamps: true }
