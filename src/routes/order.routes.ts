@@ -12,11 +12,9 @@ import { orderLimiter } from '../middlewares/rateLimiter';
 
 const router = Router();
 
-router.use(orderLimiter);
-
 // User Routes
-router.post('/', protect, createOrder);
-router.post('/verify', protect, verifyPayment);
+router.post('/', protect, orderLimiter, createOrder);
+router.post('/verify', protect, orderLimiter, verifyPayment);
 router.get('/myorders', protect, getMyOrders);
 router.get('/:id', protect, getOrderById);
 
